@@ -8,63 +8,61 @@ import yan.api.sizebay.dto.transacao.TransacaoRequest;
 import yan.api.sizebay.dto.transacao.TransacaoResponse;
 import yan.api.sizebay.exception.ClienteNaoEncontradoException;
 import yan.api.sizebay.exception.SaldoInsuficienteException;
-import yan.api.sizebay.model.Cliente;
-import yan.api.sizebay.repository.ClienteRepository;
-import yan.api.sizebay.repository.TransacaoRepository;
+import yan.api.sizebay.repository.ClienteJdbcRepository;
+import yan.api.sizebay.repository.TransacaoJdbcRepository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
 public class TransacaoService {
 
-    private final ClienteRepository clienteRepository;
-    private final TransacaoRepository transacaoRepository;
+    private final TransacaoJdbcRepository transacaoRepository;
+
+    private final ClienteJdbcRepository clienteRepository;
 
     @Transactional
     public TransacaoResponse processTransaction(Integer clienteId, TransacaoRequest request) {
-
-        TransacaoResponse result = transacaoRepository.executeTransaction(
+        return transacaoRepository.createTransaction(
                 clienteId,
                 request.valor(),
                 request.descricao(),
-                request.tipo().toString()
+                request.tipo()
         );
-
-        if (Objects.isNull(result)) {
-            throw new ClienteNaoEncontradoException();
-        }
-
-        if (Boolean.TRUE.equals(result.erro())) {
-            throw new SaldoInsuficienteException();
-        }
-
-        return new TransacaoResponse(result.limite(), result.saldo(), result.erro());
     }
 
     @Transactional(readOnly = true)
     public ExtratoResponse getStatement(Integer clienteId) {
-        Cliente cliente = clienteRepository.findById(clienteId)
-                .orElseThrow(ClienteNaoEncontradoException::new);
+        Map<String, Object> dadosSaldo = findSaldoByClienteId(clienteId);
 
-        List<ExtratoResponse.TransacaoDto> ultimasTransacoes = transacaoRepository.findLatestByClienteId(clienteId)
+        if (Objects.isNull(dadosSaldo)) {
+            throw new ClienteNaoEncontradoException();
+        }
+
+        List<ExtratoResponse.TransacaoDto> ultimasTransacoes = transacaoRepository.buscarUltimasTransacoes(clienteId)
                 .stream()
                 .map(t -> new ExtratoResponse.TransacaoDto(
                         t.getValor(),
-                        t.getTipo().name(),
+                        t.getTipo(),
                         t.getDescricao(),
                         t.getRealizadaEm()
-                )).toList();
+                ))
+                .toList();
 
         return new ExtratoResponse(
                 new ExtratoResponse.SaldoDto(
-                        cliente.getSaldo(),
+                        (Integer) dadosSaldo.get("total"),
                         LocalDateTime.now(),
-                        cliente.getLimite()
+                        (Integer) dadosSaldo.get("limite")
                 ),
                 ultimasTransacoes
         );
+    }
+
+    public Map<String, Object> findSaldoByClienteId(Integer clienteId) {
+        return clienteRepository.findSaldoCliente(clienteId);
     }
 }

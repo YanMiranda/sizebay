@@ -1,27 +1,31 @@
 package yan.api.sizebay.service;
 
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.PageRequest;
+import yan.api.sizebay.dto.extrato.ExtratoResponse;
 import yan.api.sizebay.dto.transacao.TransacaoRequest;
+import yan.api.sizebay.dto.transacao.TransacaoResponse;
 import yan.api.sizebay.exception.ClienteNaoEncontradoException;
 import yan.api.sizebay.exception.SaldoInsuficienteException;
-import yan.api.sizebay.model.Cliente;
 import yan.api.sizebay.model.Transacao;
 import yan.api.sizebay.model.enums.TipoTransacao;
-import yan.api.sizebay.repository.ClienteRepository;
-import yan.api.sizebay.repository.TransacaoRepository;
+import yan.api.sizebay.repository.ClienteJdbcRepository;
+import yan.api.sizebay.repository.TransacaoJdbcRepository;
 
+import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class TransacaoServiceTest {
@@ -30,98 +34,87 @@ class TransacaoServiceTest {
     private TransacaoService service;
 
     @Mock
-    private ClienteRepository clienteRepository;
+    private TransacaoJdbcRepository transacaoRepository;
 
     @Mock
-    private TransacaoRepository transacaoRepository;
+    private ClienteJdbcRepository clienteRepository;
 
     @Test
-    @DisplayName("Deve creditar valor e atualizar saldo com sucesso")
-    void deveProcessarCreditoComSucesso() {
+    void shouldReturnSuccessWhenTransactionIsValid() {
         Integer clienteId = 1;
-        Integer saldoInicial = 0;
-        Integer valorCredito = 1000;
+        TransacaoRequest request = new TransacaoRequest(100, "c", "descricao");
+        TransacaoResponse expectedResponse = new TransacaoResponse(1000, 100);
 
-        Cliente clienteMock = Cliente.builder()
-                .id(clienteId)
-                .limite(100000)
-                .saldo(saldoInicial)
-                .build();
+        when(transacaoRepository.createTransaction(anyInt(), anyInt(), anyString(), anyString()))
+                .thenReturn(expectedResponse);
 
-        TransacaoRequest request = new TransacaoRequest(valorCredito, TipoTransacao.c, "deposito");
+        TransacaoResponse result = service.processTransaction(clienteId, request);
 
-        when(clienteRepository.findByIdForUpdate(clienteId)).thenReturn(Optional.of(clienteMock));
-
-        var response = service.processTransaction(clienteId, request);
-
-        assertEquals(1000, response.saldo());
-        assertEquals(100000, response.limite());
-        verify(transacaoRepository, times(1)).save(any(Transacao.class));
+        assertNotNull(result);
+        assertEquals(expectedResponse.limite(), result.limite());
+        assertEquals(expectedResponse.saldo(), result.saldo());
+        verify(transacaoRepository).createTransaction(clienteId, request.valor(), request.descricao(), request.tipo());
     }
 
     @Test
-    @DisplayName("Deve debitar valor se houver limite")
-    void deveProcessarDebitoComSucesso() {
-        Integer clienteId = 1;
-        Cliente clienteMock = Cliente.builder().id(clienteId).limite(1000).saldo(0).build();
+    void shouldThrowClientNotFoundExceptionWhenTransactionFailsAndClientDoesNotExist() {
+        Integer clienteId = 99;
+        TransacaoRequest request = new TransacaoRequest(100, "c", "descricao");
 
-        TransacaoRequest request = new TransacaoRequest(500, TipoTransacao.d, "compra");
-
-        when(clienteRepository.findByIdForUpdate(clienteId)).thenReturn(Optional.of(clienteMock));
-
-        var response = service.processTransaction(clienteId, request);
-
-        assertEquals(-500, response.saldo());
-        verify(transacaoRepository, times(1)).save(any(Transacao.class));
-    }
-
-    @Test
-    @DisplayName("Deve lançar SaldoInsuficienteException quando estourar o limite")
-    void deveLancarErroSemLimite() {
-        Integer clienteId = 1;
-        Cliente clienteMock = Cliente.builder().id(clienteId).limite(1000).saldo(0).build();
-
-        TransacaoRequest request = new TransacaoRequest(1001, TipoTransacao.d, "estouro");
-
-        when(clienteRepository.findByIdForUpdate(clienteId)).thenReturn(Optional.of(clienteMock));
-
-        assertThrows(SaldoInsuficienteException.class, () ->
-                service.processTransaction(clienteId, request)
-        );
-
-        verify(transacaoRepository, never()).save(any());
-    }
-
-    @Test
-    @DisplayName("Deve lançar ClienteNaoEncontradoException se ID não existir")
-    void deveLancarErroClienteInexistente() {
-        Integer idInexistente = 99;
-        TransacaoRequest request = new TransacaoRequest(10, TipoTransacao.c, "teste");
-
-        when(clienteRepository.findByIdForUpdate(idInexistente)).thenReturn(Optional.empty());
+        when(transacaoRepository.createTransaction(anyInt(), anyInt(), anyString(), anyString()))
+                .thenReturn(null);
+        when(clienteRepository.findSaldoCliente(clienteId))
+                .thenReturn(null);
 
         assertThrows(ClienteNaoEncontradoException.class, () ->
-                service.processTransaction(idInexistente, request)
-        );
+                service.processTransaction(clienteId, request));
     }
 
     @Test
-    @DisplayName("Deve retornar extrato corretamente")
-    void deveRetornarExtrato() {
+    void shouldThrowInsufficientBalanceExceptionWhenTransactionFailsButClientExists() {
         Integer clienteId = 1;
-        Cliente clienteMock = Cliente.builder().id(clienteId).limite(1000).saldo(500).build();
+        TransacaoRequest request = new TransacaoRequest(1000000, "d", "descricao");
 
-        Transacao t1 = Transacao.builder().valor(10).tipo(TipoTransacao.c).descricao("t1").build();
-        Transacao t2 = Transacao.builder().valor(20).tipo(TipoTransacao.d).descricao("t2").build();
+        when(transacaoRepository.createTransaction(anyInt(), anyInt(), anyString(), anyString()))
+                .thenReturn(null);
+        when(clienteRepository.findSaldoCliente(clienteId))
+                .thenReturn(Map.of("total", 0, "limite", 1000));
 
-        when(clienteRepository.findById(clienteId)).thenReturn(Optional.of(clienteMock));
-        when(transacaoRepository.findByClienteIdOrderByRealizadaEmDesc(eq(clienteId), any(PageRequest.class)))
-                .thenReturn(List.of(t1, t2));
+        assertThrows(SaldoInsuficienteException.class, () ->
+                service.processTransaction(clienteId, request));
+    }
 
-        var extrato = service.getStatement(clienteId);
+    @Test
+    void shouldReturnStatementWhenClientExists() {
+        Integer clienteId = 1;
+        Map<String, Object> dadosSaldo = Map.of("total", 100, "limite", 1000);
+        List<Transacao> transacoes = List.of(
+                Transacao.builder()
+                        .valor(10)
+                        .tipo("d")
+                        .descricao("teste")
+                        .realizadaEm(LocalDateTime.now())
+                        .build()
+        );
 
-        assertEquals(500, extrato.saldo().total());
-        assertEquals(2, extrato.ultimasTransacoes().size());
-        assertEquals("t1", extrato.ultimasTransacoes().get(0).descricao());
+        when(clienteRepository.findSaldoCliente(clienteId)).thenReturn(dadosSaldo);
+        when(transacaoRepository.buscarUltimasTransacoes(clienteId)).thenReturn(transacoes);
+
+        ExtratoResponse result = service.getStatement(clienteId);
+
+        assertNotNull(result);
+        assertEquals(dadosSaldo.get("total"), result.saldo().total());
+        assertEquals(dadosSaldo.get("limite"), result.saldo().limite());
+        assertEquals(1, result.ultimasTransacoes().size());
+    }
+
+    @Test
+    void shouldThrowExceptionWhenClientDoesNotExistForStatement() {
+        Integer clienteId = 99;
+
+        when(clienteRepository.findSaldoCliente(clienteId)).thenReturn(null);
+
+        assertThrows(ClienteNaoEncontradoException.class, () ->
+                service.getStatement(clienteId));
     }
 }

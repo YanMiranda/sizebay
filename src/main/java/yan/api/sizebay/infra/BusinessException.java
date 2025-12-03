@@ -2,11 +2,11 @@ package yan.api.sizebay.infra;
 
 public abstract class BusinessException extends RuntimeException {
 
-    public BusinessException() {
+    protected BusinessException() {
         super();
     }
 
-    public BusinessException(String message) {
+    protected BusinessException(String message) {
         super(message);
     }
 

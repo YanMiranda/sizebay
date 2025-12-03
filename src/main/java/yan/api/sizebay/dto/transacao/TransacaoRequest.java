@@ -2,19 +2,20 @@ package yan.api.sizebay.dto.transacao;
 
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
-import yan.api.sizebay.model.enums.TipoTransacao;
 
 public record TransacaoRequest(
 
         @NotNull
-        @Min(value = 1)
+        @Min(value = 1, message = "Valor deve ser positivo")
         Integer valor,
 
         @NotNull
-        TipoTransacao tipo,
+        @Pattern(regexp = "[cd]", message = "Tipo deve ser c ou d")
+        String tipo,
 
         @NotNull
-        @Size(min = 1, max = 10, message = "Descrição deve conter entre 1 e 10 caracteres")
+        @Size(min = 1, max = 10, message = "Descricao deve ter entre 1 e 10 chars")
         String descricao
 ) {}

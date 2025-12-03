@@ -1,5 +1,6 @@
 package yan.api.sizebay.infra;
 
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -26,8 +27,14 @@ public class GlobalExceptionHandler {
         return ResponseEntity.unprocessableEntity().build();
     }
 
+    @ExceptionHandler(DataAccessException.class)
+    public ResponseEntity<Void> handleDatabaseError(DataAccessException e) {
+        return ResponseEntity.internalServerError().build();
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Void> handleGeneral(Exception e) {
+        e.printStackTrace();
         return ResponseEntity.internalServerError().build();
     }
 }

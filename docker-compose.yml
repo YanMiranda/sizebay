@@ -10,7 +10,7 @@ services:
       - DB_URL=jdbc:postgresql://db:5432/sizebay
       - DB_USER=sizebay
       - DB_PASSWORD=sizebay
-      - JAVA_TOOL_OPTIONS=-Xmx150m -Xms150m -Xss256k -XX:+UseSerialGC
+      - JAVA_TOOL_OPTIONS=-Xmx110m -Xms110m -Xss256k -XX:+UseSerialGC -Djava.security.egd=file:/dev/./urandom
     depends_on:
       db:
         condition: service_healthy
@@ -18,7 +18,7 @@ services:
       resources:
         limits:
           cpus: '0.55'
-          memory: '210MB'
+          memory: '180MB'
 
   api02:
     <<: *api
@@ -38,7 +38,7 @@ services:
       resources:
         limits:
           cpus: '0.15'
-          memory: '10MB'
+          memory: '70MB'
 
   db:
     image: postgres:latest

@@ -2,8 +2,6 @@ package yan.api.sizebay.model;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -17,7 +15,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
-import yan.api.sizebay.model.enums.TipoTransacao;
 
 import java.time.LocalDateTime;
 
@@ -37,10 +34,9 @@ public class Transacao {
     @Column(nullable = false, name = "TRA_VALOR")
     private Integer valor;
 
-    @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.CHAR)
     @Column(nullable = false, length = 1, name = "TRA_TIPO")
-    private TipoTransacao tipo;
+    private String tipo;
 
     @Column(nullable = false, length = 10, name = "TRA_DESCRICAO")
     private String descricao;
